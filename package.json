@@ -7,5 +7,9 @@
     "@solana/kit": "^8.2.0",
     "@solana/web3.js": "latest"
   },
-  "pnpm": {}
+  "pnpm": {
+    "overrides": {
+      "uuid": "8.3.2"
+    }
+  }
 }
