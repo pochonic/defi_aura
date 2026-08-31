@@ -83,7 +83,7 @@ def enrich_utilization_with_sdk(db, snapshots, node_path=None, rpc_url=None, deb
         return stats, debug_rows
     except Exception as exc:
         stats.failed = stats.attempted
-        stderr = completed.stderr.strip() if "completed" in locals() and completed.stderr else ""
+        stderr = (getattr(completed, "stderr", None) or getattr(exc, "stderr", None) or "").strip()
         safe_stderr = stderr.replace(rpc_url, _redact_rpc_url(rpc_url)) if stderr else ""
         log.error("Kamino SDK enrichment failed (returncode=%s, RPC=%s): %s", getattr(completed, "returncode", "unknown") if completed else "not-started", _redact_rpc_url(rpc_url), safe_stderr or type(exc).__name__)
         return stats, [{"error": f"{type(exc).__name__}: {safe_stderr or 'SDK probe failed'}", "stderr": safe_stderr or None, "rpc": _redact_rpc_url(rpc_url)}]

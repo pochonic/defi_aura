@@ -180,7 +180,7 @@ def main():
                           f"{','.join(missing) or 'none'}")
             except Exception as exc:
                 db.audit(protocol or "lending", "active adapters", None, ok=False, error=str(exc))
-                logging.getLogger(__name__).exception("Lending ingestion failed")
+                logging.getLogger(__name__).error("Lending ingestion failed: %s", type(exc).__name__)
                 if not args.interval:
                     return 1
             if not args.interval:
