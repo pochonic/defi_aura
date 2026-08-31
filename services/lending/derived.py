@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import subprocess
+import shutil
 from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,12 +40,14 @@ def enrich_utilization_with_sdk(db, snapshots, node_path=None, rpc_url=None, deb
     stats = EnrichmentStats(attempted=len(snapshots))
     if not snapshots:
         return stats, []
-    node_path = node_path or getattr(config, "KAMINO_NODE", None) or config.METEORA_DLMM_NODE
+    node_path = node_path or os.getenv("KAMINO_NODE") or getattr(config, "KAMINO_NODE", None) or config.METEORA_DLMM_NODE
+    node_path = shutil.which(node_path) or ("/root/.nix-profile/bin/node" if node_path == "node" else node_path)
     rpc_url = rpc_url or os.getenv("SOLANA_RPC_URL") or config.SOLANA_RPC_ENDPOINT
     if not rpc_url:
         raise RuntimeError("SOLANA_RPC_URL is required for Kamino SDK enrichment")
     probe = Path(__file__).with_name("kamino_sdk_probe.mjs")
     market_ids = sorted({item.market_id for item in snapshots})
+    completed = None
     try:
         completed = subprocess.run([node_path, str(probe), json.dumps(market_ids), rpc_url] + (["--debug"] if debug else []),
                                    capture_output=True, text=True, timeout=config.KAMINO_SDK_TIMEOUT_SECONDS, check=True,
@@ -82,7 +85,7 @@ def enrich_utilization_with_sdk(db, snapshots, node_path=None, rpc_url=None, deb
         stats.failed = stats.attempted
         stderr = completed.stderr.strip() if "completed" in locals() and completed.stderr else ""
         safe_stderr = stderr.replace(rpc_url, _redact_rpc_url(rpc_url)) if stderr else ""
-        log.error("Kamino SDK enrichment failed (returncode=%s, RPC=%s): %s", getattr(completed, "returncode", "unknown"), _redact_rpc_url(rpc_url), safe_stderr or type(exc).__name__)
+        log.error("Kamino SDK enrichment failed (returncode=%s, RPC=%s): %s", getattr(completed, "returncode", "unknown") if completed else "not-started", _redact_rpc_url(rpc_url), safe_stderr or type(exc).__name__)
         return stats, [{"error": f"{type(exc).__name__}: {safe_stderr or 'SDK probe failed'}", "stderr": safe_stderr or None, "rpc": _redact_rpc_url(rpc_url)}]
     finally:
         stats.duration_seconds = (datetime.now(timezone.utc) - started).total_seconds()
