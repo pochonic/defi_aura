@@ -6,7 +6,37 @@ const marketIds = JSON.parse(marketIdsJson || '[]');
 if (!marketIds.length || !rpcUrl) throw new Error('marketIds and rpcUrl are required');
 
 const rpc = createSolanaRpc(rpcUrl);
-const markets = await KaminoMarket.loadMultiple(rpc, marketIds.map(address), DEFAULT_RECENT_SLOT_DURATION_MS);
+const maxAttempts = Number.parseInt(process.env.KAMINO_SDK_MAX_ATTEMPTS || '5', 10);
+const baseBackoffMs = Number.parseInt(process.env.KAMINO_SDK_BACKOFF_MS || '1000', 10);
+
+const isRateLimited = (error) => {
+  const statusCode = error?.context?.statusCode ?? error?.statusCode;
+  return statusCode === 429 || /429|too many requests/i.test(String(error?.message || ''));
+};
+
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+let markets;
+for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  try {
+    markets = await KaminoMarket.loadMultiple(
+      rpc,
+      marketIds.map(address),
+      DEFAULT_RECENT_SLOT_DURATION_MS,
+    );
+    break;
+  } catch (error) {
+    if (!isRateLimited(error) || attempt === maxAttempts) throw error;
+
+    const backoffMs = baseBackoffMs * (2 ** (attempt - 1));
+    console.error(
+      `Kamino SDK RPC rate limited; retrying in ${backoffMs}ms ` +
+      `(attempt ${attempt + 1}/${maxAttempts})`,
+    );
+    await sleep(backoffMs);
+  }
+}
+
 const rows = [...markets.entries()].flatMap(([loadedMarketId, market]) => market.getReserves().map((reserve) => {
   const liquidity = reserve.state?.liquidity;
   const row = {
