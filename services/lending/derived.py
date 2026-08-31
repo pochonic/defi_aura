@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import subprocess
+from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,17 @@ from pathlib import Path
 import config
 
 log = logging.getLogger(__name__)
+
+def _redact_rpc_url(value):
+    if not value:
+        return value
+    try:
+        parsed = urlsplit(value)
+        if parsed.path.startswith("/v2/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/v2/[REDACTED]", parsed.query, parsed.fragment))
+    except ValueError:
+        pass
+    return "[REDACTED]"
 
 
 @dataclass
@@ -68,7 +80,9 @@ def enrich_utilization_with_sdk(db, snapshots, node_path=None, rpc_url=None, deb
         return stats, debug_rows
     except Exception as exc:
         stats.failed = stats.attempted
-        log.exception("Kamino SDK enrichment failed (RPC=%s): %s", rpc_url, exc)
-        return stats, [{"error": repr(exc), "stderr": completed.stderr if 'completed' in locals() else None, "rpc": rpc_url}]
+        stderr = completed.stderr.strip() if "completed" in locals() and completed.stderr else ""
+        safe_stderr = stderr.replace(rpc_url, _redact_rpc_url(rpc_url)) if stderr else ""
+        log.error("Kamino SDK enrichment failed (returncode=%s, RPC=%s): %s", getattr(completed, "returncode", "unknown"), _redact_rpc_url(rpc_url), safe_stderr or type(exc).__name__)
+        return stats, [{"error": f"{type(exc).__name__}: {safe_stderr or 'SDK probe failed'}", "stderr": safe_stderr or None, "rpc": _redact_rpc_url(rpc_url)}]
     finally:
         stats.duration_seconds = (datetime.now(timezone.utc) - started).total_seconds()
