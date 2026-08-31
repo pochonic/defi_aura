@@ -1,0 +1,2 @@
+import Navigation from "../components/navigation";
+export default function LendingPage() { return <main className="shell"><Navigation /><p className="eyebrow">LENDING</p><h1>Lending Intelligence</h1><p className="subtitle">Supply and borrow opportunities across DeFi.</p><section className="card empty-module"><h2>Lending data integration pending</h2><p>Data source not connected yet</p><div className="future-table">Asset · Protocol · Chain · Supply APY · Borrow APY · Utilization · Available Liquidity · Opportunity · Risk Data · Status · Trend</div></section></main>; }

@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@kamino-finance/klend-sdk": "^11.0.2",
+    "@meteora-ag/dlmm": "latest",
+    "@solana/kit": "^8.2.0",
+    "@solana/web3.js": "latest"
+  }
+}

@@ -1,0 +1,2 @@
+import Navigation from "../components/navigation";
+export default function MethodologyPage() { return <main className="shell"><Navigation /><p className="eyebrow">METHODOLOGY</p><h1>Methodology</h1><p className="subtitle">Transparent data, explainable opportunity and risk intelligence.</p><section className="card empty-module"><p>Methodology documentation will be published as each intelligence module is connected.</p></section></main>; }
