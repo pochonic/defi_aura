@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from decimal import Decimal
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -17,6 +18,13 @@ def _number(value):
     return float(str(value).replace(",", ""))
 
 
+WAD = Decimal(10) ** 18
+
+
+def _decimal(value):
+    return Decimal(str(value).replace(",", ""))
+
+
 class SaveClient:
     """Save/Solend REST adapter. Save-specific API knowledge stays here."""
 
@@ -25,7 +33,9 @@ class SaveClient:
     def __init__(self, base_url=None, opener=urlopen):
         self.base_url = (base_url or os.getenv("SAVE_API_BASE_URL") or config.SAVE_API_BASE_URL).rstrip("/")
         self.opener = opener
-        self.last_report = {"markets": 0, "reserves": 0, "skipped": 0, "errors": 0}
+        self.last_report = {"markets": 0, "reserves": 0, "discovered": 0, "fresh": 0,
+                            "stale_skipped": 0, "anomalous_skipped": 0, "snapshots_persisted": 0,
+                            "skipped": 0, "errors": 0}
 
     def _get_json(self, path):
         endpoint = self.base_url + path
@@ -39,7 +49,9 @@ class SaveClient:
     def fetch_lending_markets(self, assets=None):
         markets_payload, markets_endpoint = self._get_json(config.SAVE_MARKETS_ENDPOINT)
         markets = markets_payload.get("results", []) if isinstance(markets_payload, dict) else []
-        self.last_report = {"markets": len(markets), "reserves": 0, "skipped": 0, "errors": 0}
+        self.last_report = {"markets": len(markets), "reserves": 0, "discovered": 0, "fresh": 0,
+                            "stale_skipped": 0, "anomalous_skipped": 0, "snapshots_persisted": 0,
+                            "skipped": 0, "errors": 0}
         configs = []
         for market in markets:
             try:
@@ -59,6 +71,7 @@ class SaveClient:
                 if reserve.get("address"):
                     reserve_configs.append((market, reserve, endpoint))
         self.last_report["reserves"] = len(reserve_configs)
+        self.last_report["discovered"] = len(reserve_configs)
         observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         state_by_id = {}
         state_endpoints = []
@@ -82,8 +95,22 @@ class SaveClient:
             if not item:
                 self.last_report["skipped"] += 1
                 continue
+            state = item["data"].get("reserve") or item["data"]
+            # A stale reserve has not been refreshed on-chain.  Save still
+            # returns a compounded rate for it (often enormous at 100%
+            # utilization), but it is not a current lending observation.
+            if int((state.get("lastUpdate") or {}).get("stale", 0)) != 0:
+                self.last_report["stale_skipped"] += 1
+                self.last_report["skipped"] += 1
+                continue
             try:
-                snapshots.append(self._normalize(market, reserve_config, item["data"], observed_at, markets_endpoint, item["endpoint"], prices, price_endpoint))
+                snapshot = self._normalize(market, reserve_config, item["data"], observed_at, markets_endpoint, item["endpoint"], prices, price_endpoint)
+                if "anomalous_supply_apy" in snapshot.quality_flags or "anomalous_borrow_apy" in snapshot.quality_flags:
+                    self.last_report["anomalous_skipped"] += 1
+                    self.last_report["skipped"] += 1
+                    continue
+                snapshots.append(snapshot)
+                self.last_report["fresh"] += 1
             except (KeyError, TypeError, ValueError) as exc:
                 self.last_report["skipped"] += 1
                 log.error("Skipping invalid Save reserve %s: %s", reserve_id, exc)
@@ -97,35 +124,48 @@ class SaveClient:
         rates = result.get("rates") or {}
         token = reserve_config.get("liquidityToken") or {}
         decimals = int(liquidity.get("mintDecimals", token.get("decimals")))
-        available_raw = float(liquidity["availableAmount"])
-        borrowed_wads = float(liquidity["borrowedAmountWads"])
-        available_native = available_raw / (10 ** decimals)
-        borrowed_native = borrowed_wads / 10 ** 18 / (10 ** decimals)
-        supplied_native = available_native + borrowed_native
-        utilization = borrowed_native / supplied_native if supplied_native else None
+        available_atomic = _decimal(liquidity["availableAmount"])
+        borrowed_atomic = _decimal(liquidity["borrowedAmountWads"]) / WAD
+        scale = Decimal(10) ** decimals
+        supplied_atomic = available_atomic + borrowed_atomic
+        available_native = available_atomic / scale
+        borrowed_native = borrowed_atomic / scale
+        supplied_native = supplied_atomic / scale
+        utilization = float(borrowed_atomic / supplied_atomic) if supplied_atomic else None
         price = prices.get(token.get("mint"))
-        supplied_usd = supplied_native * price if price is not None else None
-        borrowed_usd = borrowed_native * price if price is not None else None
+        supplied_usd = float(supplied_native * _decimal(price)) if price is not None else None
+        borrowed_usd = float(borrowed_native * _decimal(price)) if price is not None else None
+        available_usd = float(available_native * _decimal(price)) if price is not None else None
         missing = []
-        for name, value in (("supply_apy", rates.get("supplyInterest")), ("borrow_apy", rates.get("borrowInterest")), ("utilization", utilization), ("total_supplied_usd", supplied_usd), ("total_borrowed_usd", borrowed_usd), ("available_liquidity_usd", available_native * price if price is not None else None)):
+        for name, value in (("supply_apy", rates.get("supplyInterest")), ("borrow_apy", rates.get("borrowInterest")), ("utilization", utilization), ("total_supplied_usd", supplied_usd), ("total_borrowed_usd", borrowed_usd), ("available_liquidity_usd", available_usd)):
             if value is None:
                 missing.append(name)
         metadata = {
             "market_catalog": {"source": markets_endpoint, "type": "Save/Solend REST API"},
             "reserve_state": {"source": state_endpoint, "type": "Save/Solend REST API", "last_update_slot": state.get("lastUpdate", {}).get("slot")},
-            "metrics": {"supply_apy": "observed:Save/Solend REST API", "borrow_apy": "observed:Save/Solend REST API", "available_liquidity_native": "observed:Save/Solend REST API", "utilization": "derived:availableAmount + borrowedAmountWads from same reserve response", "supplied": "derived:available + borrowed from same reserve response", "price": "observed:Save/Solend price API" if price is not None else "missing"},
+            "adapter_version": config.SAVE_ADAPTER_VERSION,
+            "apy_calculation_version": config.SAVE_APY_CALCULATION_VERSION,
+            "metrics": {"supply_apy": "observed:Save/Solend REST API percent / 100", "borrow_apy": "observed:Save/Solend REST API percent / 100", "available_liquidity_native": "derived:availableAmount / 10^mintDecimals", "utilization": "derived:SDK formula borrowedAmountWads/WAD / (availableAmount + borrowedAmountWads/WAD)", "supplied": "derived:(availableAmount + borrowedAmountWads/WAD) / 10^mintDecimals", "price": "observed:Save/Solend price API" if price is not None else "missing"},
             "decimals": decimals, "available_amount_raw": liquidity.get("availableAmount"), "borrowed_amount_wads": liquidity.get("borrowedAmountWads"), "cumulative_borrow_rate_wads": liquidity.get("cumulativeBorrowRateWads"), "price": price, "price_source": price_endpoint,
         }
+        supply_apy = _number(rates["supplyInterest"]) / 100 if rates.get("supplyInterest") is not None else None
+        borrow_apy = _number(rates["borrowInterest"]) / 100 if rates.get("borrowInterest") is not None else None
+        quality_flags = []
+        if price is None:
+            quality_flags.append("price_missing")
+        if supply_apy is not None and supply_apy > 1:
+            quality_flags.append("anomalous_supply_apy")
+        if borrow_apy is not None and borrow_apy > 1:
+            quality_flags.append("anomalous_borrow_apy")
         return LendingMarketSnapshot(
             protocol="save", chain="Solana", market_id=market["address"], market_name=market.get("name"),
             market_description=market.get("description"), market_is_primary=market.get("isPrimary"),
             reserve_id=reserve_id, asset_symbol=token.get("symbol"), asset_mint=token.get("mint"),
-            supply_apy=_number(rates["supplyInterest"]) / 100 if rates.get("supplyInterest") is not None else None,
-            borrow_apy=_number(rates["borrowInterest"]) / 100 if rates.get("borrowInterest") is not None else None,
+            supply_apy=supply_apy, borrow_apy=borrow_apy,
             utilization=utilization, total_supplied_usd=supplied_usd, total_borrowed_usd=borrowed_usd,
-            available_liquidity_usd=available_native * price if price is not None else None,
-            available_liquidity_native=available_native, available_liquidity_decimals=decimals,
+            available_liquidity_usd=available_usd,
+            available_liquidity_native=float(available_native), available_liquidity_decimals=decimals,
             available_liquidity_source=state_endpoint, observed_at=observed_at, source=self.source,
             source_endpoint=state_endpoint, source_metadata=metadata, missing_fields=tuple(missing),
-            quality_flags=tuple(["price_missing"] if price is None else []),
+            quality_flags=tuple(quality_flags),
         )

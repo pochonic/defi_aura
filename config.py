@@ -84,6 +84,12 @@ POLL_INTERVAL_SECONDS = 15 * 60
 DATABASE_PATH = Path("crypto_radar.db")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+LENDING_PROTOCOLS = tuple(
+    item.strip().lower()
+    for item in os.getenv("LENDING_PROTOCOLS", "kamino,save").split(",")
+    if item.strip()
+)
+
 ALLOWED_TOKENS = {"USDC", "USDT", "SOL", "WSOL", "JUP", "JitoSOL", "JITOSOL"}
 ALLOWED_PROTOCOLS = {"Raydium", "Orca", "Meteora"}
 LP_FILTERS = {
@@ -111,6 +117,8 @@ SAVE_MARKET_CONFIG_ENDPOINT = "/v1/markets/configs?ids={market_id}"
 SAVE_RESERVES_ENDPOINT = "/v1/reserves?ids={reserve_ids}"
 SAVE_PRICES_ENDPOINT = "/v1/prices?mints={mints}"
 SAVE_REQUEST_TIMEOUT_SECONDS = 30
+SAVE_ADAPTER_VERSION = "3.0"
+SAVE_APY_CALCULATION_VERSION = "save-rest-percent-sdk-units-v3"
 LENDING_CAPACITY_MIN_USD = 1_000.0
 LENDING_CAPACITY_MAX_USD = 100_000_000.0
 LENDING_APY_REFERENCE = 0.20

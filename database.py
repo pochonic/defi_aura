@@ -321,7 +321,7 @@ class Database:
         self.conn.commit()
 
     def latest_lending_snapshots(self, asset=None, protocol=None, limit=20):
-        query = "SELECT * FROM lending_snapshots WHERE 1=1"
+        query = "SELECT * FROM lending_snapshots WHERE " + self._valid_lending_snapshot_sql()
         params = []
         if asset:
             query += " AND asset_symbol = ?"
@@ -334,7 +334,7 @@ class Database:
         return self.conn.execute(query, params).fetchall()
 
     def lending_history(self, asset=None, protocol=None):
-        query = "SELECT * FROM lending_snapshots WHERE 1=1"
+        query = "SELECT * FROM lending_snapshots WHERE " + self._valid_lending_snapshot_sql()
         params = []
         if asset:
             query += " AND asset_symbol = ?"
@@ -348,15 +348,27 @@ class Database:
     def latest_lending_reserves(self, asset=None, protocol=None):
         query = """SELECT s.* FROM lending_snapshots s JOIN (
             SELECT protocol, chain, market_id, reserve_id, MAX(observed_at) AS observed_at
-            FROM lending_snapshots GROUP BY protocol, chain, market_id, reserve_id
+            FROM lending_snapshots WHERE """ + self._valid_lending_snapshot_sql() + """ GROUP BY protocol, chain, market_id, reserve_id
         ) latest ON latest.protocol=s.protocol AND latest.chain=s.chain AND latest.market_id=s.market_id
-            AND latest.reserve_id=s.reserve_id AND latest.observed_at=s.observed_at WHERE 1=1"""
+            AND latest.reserve_id=s.reserve_id AND latest.observed_at=s.observed_at WHERE """ + self._valid_lending_snapshot_sql("s")
         params = []
         if asset:
             query += " AND s.asset_symbol = ?"; params.append(asset)
         if protocol:
             query += " AND lower(s.protocol) = lower(?)"; params.append(protocol)
         return self.conn.execute(query, params).fetchall()
+
+    @staticmethod
+    def _valid_lending_snapshot_sql(alias=None):
+        prefix = f"{alias}." if alias else ""
+        # Save v1/v2 rows are quarantined from every analytics read even
+        # before the operational cleanup runs.
+        return (
+            f"(lower({prefix}protocol) <> 'save' OR "
+            f"(COALESCE({prefix}source_metadata, '') LIKE '%save-rest-percent-sdk-units-v3%' "
+            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%anomalous_supply_apy%' "
+            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%anomalous_borrow_apy%'))"
+        )
 
     def save_lending_evaluation(self, snapshot, evaluation):
         self.conn.execute("""INSERT INTO lending_evaluations

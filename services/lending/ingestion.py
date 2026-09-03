@@ -53,4 +53,5 @@ def fetch_and_persist(db, client):
     snapshots = client.fetch_lending_markets()
     stats = IngestionStats(reserves=client.last_report["reserves"], skipped=client.last_report["skipped"], errors=client.last_report["errors"])
     persist_lending_snapshots(db, snapshots, stats)
+    client.last_report["snapshots_persisted"] = stats.saved
     return snapshots, stats

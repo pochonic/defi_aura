@@ -41,7 +41,9 @@ def main():
         return 2
     db = Database(config.DATABASE_PATH)
     protocol = args.protocol.lower() if args.protocol else None
-    clients = {"kamino": KaminoClient(), "save": SaveClient()}
+    available_clients = {"kamino": KaminoClient(), "save": SaveClient()}
+    active_protocols = {protocol} if protocol else set(config.LENDING_PROTOCOLS)
+    clients = {name: client for name, client in available_clients.items() if name in active_protocols}
     try:
         if args.show_latest:
             rows = db.latest_lending_snapshots(asset=args.asset[0] if args.asset else None, protocol=protocol, limit=args.limit)
@@ -137,6 +139,8 @@ def main():
                     errors=sum(report["errors"] for report in adapter_reports.values()),
                 )
                 persist_lending_snapshots(db, snapshots, stats)
+                for name, report in adapter_reports.items():
+                    report["snapshots_persisted"] = sum(1 for item in snapshots if item.protocol.lower() == name)
                 db_duration = perf_counter() - db_started
                 kamino_snapshots = [item for item in snapshots if item.protocol == "Kamino"]
                 enrichment_input = kamino_snapshots[:args.limit] if args.debug_enrichment else kamino_snapshots
@@ -144,6 +148,8 @@ def main():
                 duration = perf_counter() - started
                 print("Lending ingestion")
                 for name, report in adapter_reports.items():
+                    if name == "save":
+                        print(f"Save reserves discovered: {report['discovered']} | fresh: {report['fresh']} | stale skipped: {report['stale_skipped']} | anomalous skipped: {report['anomalous_skipped']} | snapshots persisted: {report['snapshots_persisted']}")
                     print(f"{name.title()} markets: {report['markets']} | reserves: {report['reserves']} | REST: {rest_durations[name]:.2f}s")
                 print(f"Reserves: {stats.reserves}")
                 print(f"Snapshots saved: {stats.saved}")
