@@ -30,6 +30,9 @@ const bnNumber = (value, precision) => value == null ? null : Number(value.toStr
 const nameOf = (value) => {
   if (value == null) return null;
   if (Buffer.isBuffer(value)) return value.toString('utf8').replace(/\0/g, '').trim();
+  if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+    return Buffer.from(value).toString('utf8').replace(/\0/g, '').trim();
+  }
   return String(value).replace(/\0/g, '').trim();
 };
 
