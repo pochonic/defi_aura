@@ -10,6 +10,10 @@ KAMINO_POLL_INTERVAL_SECONDS = 15 * 60
 KAMINO_NODE = os.getenv("KAMINO_NODE", "node")
 KAMINO_SDK_TIMEOUT_SECONDS = 60
 
+DRIFT_ENV = os.getenv("DRIFT_ENV", "mainnet-beta")
+DRIFT_NODE = os.getenv("DRIFT_NODE", "node")
+DRIFT_SDK_TIMEOUT_SECONDS = 90
+
 API_BASE_URL = "https://api-v3.raydium.io"
 RAYDIUM_POOLS_ENDPOINT = "/pools/info/list"
 REQUEST_TIMEOUT_SECONDS = 20

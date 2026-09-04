@@ -2,6 +2,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@drift-labs/sdk": "2.142.0-beta.17",
     "@kamino-finance/klend-sdk": "^11.0.2",
     "@meteora-ag/dlmm": "latest",
     "@solana/kit": "^8.2.0",

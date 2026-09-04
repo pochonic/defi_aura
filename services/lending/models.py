@@ -32,7 +32,7 @@ class LendingMarketSnapshot:
     source_metadata: dict = field(default_factory=dict)
 
     def validate(self) -> None:
-        if self.protocol not in {"Kamino", "save"} or self.chain != "Solana":
+        if self.protocol not in {"Kamino", "save", "Drift"} or self.chain != "Solana":
             raise ValueError("lending snapshot has an unsupported protocol or chain")
         if not self.market_id or not self.reserve_id:
             raise ValueError("market_id and reserve_id are required")

@@ -7,6 +7,7 @@ Configure these variables on the Railway service (do not commit their values):
 - `DATABASE_URL`: PostgreSQL connection URL supplied by Railway PostgreSQL.
 - `SOLANA_RPC_URL`: Alchemy Solana RPC URL, including its API key.
 - `KAMINO_API_BASE_URL`: `https://api.kamino.finance` (or the approved API endpoint).
+- `LENDING_PROTOCOLS`: `kamino,save` by default; add `drift` after validating the Drift adapter.
 
 `DATABASE_URL` selects PostgreSQL. When it is absent, local development continues
 to use `crypto_radar.db` through SQLite.
@@ -28,6 +29,14 @@ Start command:
 
 ```bash
 python fetch_lending_markets.py --with-sdk-enrichment
+```
+
+The repository also includes a read-only Drift spot-lending adapter. It uses
+the same `SOLANA_RPC_URL` and the pinned `@drift-labs/sdk` dependency; no wallet
+or signing key is required. Activate it with:
+
+```text
+LENDING_PROTOCOLS=kamino,save,drift
 ```
 
 Do not add `--interval` to the Railway command. The process exits after one

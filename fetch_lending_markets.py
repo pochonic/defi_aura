@@ -10,6 +10,7 @@ from database import Database
 from services.lending.ingestion import IngestionStats, persist_lending_snapshots
 from services.lending.kamino import KaminoClient
 from services.lending.save import SaveClient
+from services.lending.drift import DriftClient
 from services.lending.derived import enrich_utilization_with_sdk
 from services.lending.history import supply_apy_history
 from services.lending.scoring import evaluate_lending_opportunity
@@ -20,10 +21,10 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, OSError):
         pass
-    parser = argparse.ArgumentParser(description="Fetch and persist Kamino lending market snapshots")
+    parser = argparse.ArgumentParser(description="Fetch and persist lending market snapshots")
     parser.add_argument("--interval", type=int, default=0, help="repeat every N seconds; 0 runs once")
     parser.add_argument("--asset", action="append", help="only print these symbols after ingestion (repeatable)")
-    parser.add_argument("--protocol", choices=("kamino", "save", "Kamino", "Save"), help="protocol filter; omitted runs all active adapters")
+    parser.add_argument("--protocol", choices=("kamino", "save", "drift", "Kamino", "Save", "Drift"), help="protocol filter; omitted runs all active adapters")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--show-latest", action="store_true", help="show latest persisted snapshots and exit")
     parser.add_argument("--show-history", action="store_true", help="show APY history for persisted reserves and exit")
@@ -41,7 +42,7 @@ def main():
         return 2
     db = Database(config.DATABASE_PATH)
     protocol = args.protocol.lower() if args.protocol else None
-    available_clients = {"kamino": KaminoClient(), "save": SaveClient()}
+    available_clients = {"kamino": KaminoClient(), "save": SaveClient(), "drift": DriftClient()}
     active_protocols = {protocol} if protocol else set(config.LENDING_PROTOCOLS)
     clients = {name: client for name, client in available_clients.items() if name in active_protocols}
     try:
@@ -150,7 +151,7 @@ def main():
                 for name, report in adapter_reports.items():
                     if name == "save":
                         print(f"Save reserves discovered: {report['discovered']} | fresh: {report['fresh']} | stale skipped: {report['stale_skipped']} | anomalous skipped: {report['anomalous_skipped']} | snapshots persisted: {report['snapshots_persisted']}")
-                    print(f"{name.title()} markets: {report['markets']} | reserves: {report['reserves']} | REST: {rest_durations[name]:.2f}s")
+                print(f"{name.title()} markets: {report['markets']} | reserves: {report['reserves']} | Fetch: {rest_durations[name]:.2f}s")
                 print(f"Reserves: {stats.reserves}")
                 print(f"Snapshots saved: {stats.saved}")
                 print(f"Snapshots skipped: {stats.skipped}")
