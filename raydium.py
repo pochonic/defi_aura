@@ -158,7 +158,7 @@ def normalize(raw: dict[str, Any]) -> Pool | None:
     a, b = raw.get("mintA") or {}, raw.get("mintB") or {}
     token_a = a.get("symbol").strip() if isinstance(a.get("symbol"), str) else None
     token_b = b.get("symbol").strip() if isinstance(b.get("symbol"), str) else None
-    if not token_a or not token_b or not (token_a in config.ALLOWED_TOKENS or token_b in config.ALLOWED_TOKENS):
+    if not token_a or not token_b or not (token_a.upper() in config.ALLOWED_TOKENS_NORMALIZED or token_b.upper() in config.ALLOWED_TOKENS_NORMALIZED):
         return None
     day, week = raw.get("day") or {}, raw.get("week") or {}
     rewards = raw.get("day", {}).get("rewardApr") if isinstance(raw.get("day"), dict) else None
@@ -355,7 +355,7 @@ def scan_source(db: Database, raw, endpoint, normalizer=normalize, protocol="Ray
             raw_tokens = item.get("token_x"), item.get("token_y")
             raw_token_metadata_ok = all(isinstance(token, dict) and token.get("symbol") and token.get("address") for token in raw_tokens)
         symbols = [token.get("symbol") if isinstance(token, dict) else None for token in raw_tokens]
-        if any(symbol in config.ALLOWED_TOKENS for symbol in symbols):
+        if any(isinstance(symbol, str) and symbol.upper() in config.ALLOWED_TOKENS_NORMALIZED for symbol in symbols):
             allowed_token_count += 1
         raw_missing = set()
         if raw_tvl is None: raw_missing.add("tvl")

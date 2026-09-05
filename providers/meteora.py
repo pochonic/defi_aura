@@ -22,7 +22,7 @@ def normalize(raw):
     token_b = raw.get("token_y") or {}
     symbol_a = token_a.get("symbol")
     symbol_b = token_b.get("symbol")
-    if not symbol_a or not symbol_b or not (symbol_a in config.ALLOWED_TOKENS or symbol_b in config.ALLOWED_TOKENS):
+    if not symbol_a or not symbol_b or not (symbol_a.upper() in config.ALLOWED_TOKENS_NORMALIZED or symbol_b.upper() in config.ALLOWED_TOKENS_NORMALIZED):
         return None
     pool_config = raw.get("pool_config") or {}
     volume = (raw.get("volume") or {}).get("24h")

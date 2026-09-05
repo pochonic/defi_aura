@@ -95,6 +95,7 @@ LENDING_PROTOCOLS = tuple(
 )
 
 ALLOWED_TOKENS = {"USDC", "USDT", "SOL", "WSOL", "JUP", "JitoSOL", "JITOSOL"}
+ALLOWED_TOKENS_NORMALIZED = {token.upper() for token in ALLOWED_TOKENS}
 ALLOWED_PROTOCOLS = {"Raydium", "Orca", "Meteora"}
 LP_FILTERS = {
     "min_tvl_usd": 5_000_000.0,

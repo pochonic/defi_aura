@@ -33,7 +33,7 @@ def _reward_apr(raw, stats, tvl):
 def normalize(raw):
     token_a, token_b = raw.get("tokenA") or {}, raw.get("tokenB") or {}
     symbol_a, symbol_b = token_a.get("symbol"), token_b.get("symbol")
-    if not symbol_a or not symbol_b or not (symbol_a in config.ALLOWED_TOKENS or symbol_b in config.ALLOWED_TOKENS):
+    if not symbol_a or not symbol_b or not (symbol_a.upper() in config.ALLOWED_TOKENS_NORMALIZED or symbol_b.upper() in config.ALLOWED_TOKENS_NORMALIZED):
         return None
     stats = raw.get("stats") or {}
     day = stats.get("24h") or {}
