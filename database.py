@@ -362,12 +362,13 @@ class Database:
     def _valid_lending_snapshot_sql(alias=None):
         prefix = f"{alias}." if alias else ""
         # Save v1/v2 rows are quarantined from every analytics read even
-        # before the operational cleanup runs.
+        # before the operational cleanup runs. Anomalous APYs are excluded
+        # for every protocol so Drift/Kamino outliers cannot enter rankings.
         return (
-            f"(lower({prefix}protocol) <> 'save' OR "
-            f"(COALESCE({prefix}source_metadata, '') LIKE '%%save-rest-percent-sdk-units-v3%%' "
-            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_supply_apy%%' "
-            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_borrow_apy%%'))"
+            f"(COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_supply_apy%%' "
+            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_borrow_apy%%' "
+            f"AND (lower({prefix}protocol) <> 'save' OR "
+            f"(COALESCE({prefix}source_metadata, '') LIKE '%%save-rest-percent-sdk-units-v3%%')))"
         )
 
     def save_lending_evaluation(self, snapshot, evaluation):
