@@ -26,15 +26,18 @@ def main():
         postgres = db.backend == "postgresql"
         size_query = "SELECT pg_database_size(current_database())" if postgres else None
         before_bytes = scalar(db, size_query) if postgres else os.path.getsize(db.path)
-        invalid = "(lower(protocol)='save' AND (COALESCE(source_metadata, '') NOT LIKE '%save-rest-percent-sdk-units-v3%' OR COALESCE(quality_flags, '') LIKE '%anomalous_%'))"
+        # psycopg treats ``%`` as a parameter marker even when it appears in
+        # a SQL LIKE literal; ``%%`` is portable here (and equivalent for
+        # SQLite), so the same cleanup script works on both backends.
+        invalid = "(lower(protocol)='save' AND (COALESCE(source_metadata, '') NOT LIKE '%%save-rest-percent-sdk-units-v3%%' OR COALESCE(quality_flags, '') LIKE '%%anomalous_%%'))"
         save_snapshots = scalar(db, f"SELECT COUNT(*) FROM lending_snapshots WHERE {invalid}")
-        save_evaluations = scalar(db, "SELECT COUNT(*) FROM lending_evaluations WHERE lower(protocol)='save' AND observed_at < COALESCE((SELECT MIN(observed_at) FROM lending_snapshots WHERE lower(protocol)='save' AND COALESCE(source_metadata, '') LIKE '%save-rest-percent-sdk-units-v3%' AND COALESCE(quality_flags, '') NOT LIKE '%anomalous_%'), '9999-12-31')")
+        save_evaluations = scalar(db, "SELECT COUNT(*) FROM lending_evaluations WHERE lower(protocol)='save' AND observed_at < COALESCE((SELECT MIN(observed_at) FROM lending_snapshots WHERE lower(protocol)='save' AND COALESCE(source_metadata, '') LIKE '%%save-rest-percent-sdk-units-v3%%' AND COALESCE(quality_flags, '') NOT LIKE '%%anomalous_%%'), '9999-12-31')")
         kamino_before = scalar(db, "SELECT COUNT(*) FROM lending_snapshots WHERE lower(protocol)='kamino'")
         print(f"backend={db.backend} before_bytes={before_bytes} save_snapshots={save_snapshots} save_evaluations={save_evaluations} kamino_snapshots={kamino_before}")
         if not args.execute:
             print("preview_only=true")
             return 0
-        db.conn.execute("DELETE FROM lending_evaluations WHERE lower(protocol)='save' AND observed_at < COALESCE((SELECT MIN(observed_at) FROM lending_snapshots WHERE lower(protocol)='save' AND COALESCE(source_metadata, '') LIKE '%save-rest-percent-sdk-units-v3%' AND COALESCE(quality_flags, '') NOT LIKE '%anomalous_%'), '9999-12-31')")
+        db.conn.execute("DELETE FROM lending_evaluations WHERE lower(protocol)='save' AND observed_at < COALESCE((SELECT MIN(observed_at) FROM lending_snapshots WHERE lower(protocol)='save' AND COALESCE(source_metadata, '') LIKE '%%save-rest-percent-sdk-units-v3%%' AND COALESCE(quality_flags, '') NOT LIKE '%%anomalous_%%'), '9999-12-31')")
         db.conn.execute(f"DELETE FROM lending_snapshots WHERE {invalid}")
         db.conn.commit()
         kamino_after = scalar(db, "SELECT COUNT(*) FROM lending_snapshots WHERE lower(protocol)='kamino'")

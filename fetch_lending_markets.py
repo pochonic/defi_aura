@@ -116,7 +116,9 @@ def main():
                 score_text = "N/A" if shown_score is None else f"{shown_score:.1f}"
                 print(f"{index} | {row['protocol']} | {row['asset_symbol'] or 'N/A'} | {row['market_id']} | {format_pct(row['supply_apy'])} | {format_pct(median7)} | {format_ratio(row['utilization'])} | {format_money(row['total_supplied_usd'])} | {score_text} | {evaluation['score_status']} | {evaluation['available_weight'] * 100:.0f}% | {evaluation['confidence']:.2f} | {','.join(evaluation['flags']) or '-'}")
             print("\nTop supply APY (comparison only)")
-            for index, (row, evaluation) in enumerate(sorted(evaluated, key=lambda pair: pair[0]["supply_apy"] if pair[0]["supply_apy"] is not None else -1, reverse=True)[:args.limit], 1):
+            bounded_evaluated = [(row, evaluation) for row, evaluation in evaluated
+                                 if row["supply_apy"] is None or row["supply_apy"] <= 1]
+            for index, (row, evaluation) in enumerate(sorted(bounded_evaluated, key=lambda pair: pair[0]["supply_apy"] if pair[0]["supply_apy"] is not None else -1, reverse=True)[:args.limit], 1):
                 print(f"{index} | {row['protocol']} | {row['asset_symbol'] or 'N/A'} | {row['market_id']} | {format_pct(row['supply_apy'])} | Score: {display_score(evaluation):.1f} | Status: {evaluation['score_status']} | Flags: {','.join(evaluation['flags']) or '-'}")
             return
         while True:
@@ -172,16 +174,19 @@ def main():
                             print(row)
                     print("Derived fields persisted: utilization, available_amount_native | Pending: available_liquidity_usd")
                 visible = snapshots if not args.asset else [item for item in snapshots if item.asset_symbol in set(args.asset)]
-                print("Top supply APY (audit only)")
-                print("Asset | Market | Supply APY | Borrow APY | Supply USD | Borrow USD | Missing")
-                for item in sorted(visible, key=lambda value: value.supply_apy or -1, reverse=True)[:10]:
+                print("Top supply APY (audit only; anomalous APYs omitted)")
+                print("Protocol | Asset | Market | Supply APY | Borrow APY | Supply USD | Borrow USD | Missing")
+                bounded_visible = [item for item in visible
+                                   if (item.supply_apy is None or item.supply_apy <= 1)
+                                   and (item.borrow_apy is None or item.borrow_apy <= 1)]
+                for item in sorted(bounded_visible, key=lambda value: value.supply_apy or -1, reverse=True)[:10]:
                     persisted = db.conn.execute("""SELECT utilization, available_amount_native, missing_fields
                         FROM lending_snapshots WHERE protocol=? AND market_id=? AND reserve_id=? AND observed_at=?""",
                         (item.protocol, item.market_id, item.reserve_id, item.observed_at)).fetchone()
                     missing = list(item.missing_fields)
                     if persisted and persisted["utilization"] is not None and "utilization" in missing:
                         missing.remove("utilization")
-                    print(f"{item.asset_symbol or item.reserve_id} | {item.market_name or item.market_id} | "
+                    print(f"{item.protocol} | {item.asset_symbol or item.reserve_id} | {item.market_name or item.market_id} | "
                           f"{format_pct(item.supply_apy)} | {format_pct(item.borrow_apy)} | "
                           f"{format_money(item.total_supplied_usd)} | {format_money(item.total_borrowed_usd)} | "
                           f"{','.join(missing) or 'none'}")
