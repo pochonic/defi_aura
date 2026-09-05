@@ -3,5 +3,5 @@ builder = "NIXPACKS"
 buildCommand = "python -m pip install -r requirements.txt"
 
 [deploy]
-startCommand = "python fetch_lending_markets.py --with-sdk-enrichment"
+startCommand = "python railway_cycle.py"
 restartPolicyType = "NEVER"

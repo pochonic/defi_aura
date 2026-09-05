@@ -1,4 +1,4 @@
-# Railway: Lending Intelligence collector
+# Railway: LP + Lending Intelligence collector
 
 ## Variables
 
@@ -23,12 +23,14 @@ one-shot process; configure Railway Cron with:
 
 The repository includes `railway.toml` to install both `requirements.txt` and
 the Node SDK dependencies used by `--with-sdk-enrichment`, and to set the
-one-shot start command. Set the cron schedule in the Railway service settings.
+one-shot start command. Each cron execution now runs the LP scanner, Lending
+ingestion with SDK enrichment, and Lending evaluation against the same
+PostgreSQL database. Set the cron schedule in the Railway service settings.
 
 Start command:
 
 ```bash
-python fetch_lending_markets.py --with-sdk-enrichment
+python railway_cycle.py
 ```
 
 The repository also includes a read-only Drift spot-lending adapter. It uses
@@ -55,4 +57,5 @@ python fetch_lending_markets.py --rank --limit 10
 ```
 
 The command uses the same `DATABASE_URL`, so it validates the deployed database
-rather than the local SQLite file.
+rather than the local SQLite file. The cycle exits with a non-zero code if LP,
+Lending ingestion, or Lending evaluation fails.

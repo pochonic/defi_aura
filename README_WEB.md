@@ -28,7 +28,13 @@ API: `http://127.0.0.1:8000`
 - `GET /api/health`
 - `GET /api/pools`
 - `GET /api/pools/{address}`
+- `GET /api/lending`
+- `GET /api/lending/{reserve_id}`
 - `GET /api/protocols/health`
+
+Lending lee los últimos snapshots válidos de `lending_snapshots` y sus
+evaluaciones explicables de `lending_evaluations`. Admite `asset`, `protocol`,
+`min_score` y `eligible_only`; no recalcula scores ni rellena campos ausentes.
 
 La API abre `crypto_radar.db` con SQLite `mode=ro`. Se puede cambiar la ruta con `CRYPTO_RADAR_DB`.
 
