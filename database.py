@@ -462,9 +462,11 @@ class Database:
         query = "SELECT timestamp_bucket AS snapshot_time, canonical_pair, price AS price_ratio, source, source_count, min_price, max_price, dispersion_pct, quality_warning, excluded_count FROM pair_price_snapshots WHERE canonical_pair = ?"
         params = [canonical_pair]
         if since:
-            query += " AND snapshot_time >= ?"
+            # Filter on the physical column, not the SELECT alias. PostgreSQL
+            # does not allow SELECT aliases in WHERE (SQLite happens to).
+            query += " AND timestamp_bucket >= ?"
             params.append(since)
-        query += " ORDER BY snapshot_time ASC"
+        query += " ORDER BY timestamp_bucket ASC"
         return self.conn.execute(query, params).fetchall()
 
     def pair_price_source_ranges(self, canonical_pair):
