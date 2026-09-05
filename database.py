@@ -365,9 +365,9 @@ class Database:
         # before the operational cleanup runs.
         return (
             f"(lower({prefix}protocol) <> 'save' OR "
-            f"(COALESCE({prefix}source_metadata, '') LIKE '%save-rest-percent-sdk-units-v3%' "
-            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%anomalous_supply_apy%' "
-            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%anomalous_borrow_apy%'))"
+            f"(COALESCE({prefix}source_metadata, '') LIKE '%%save-rest-percent-sdk-units-v3%%' "
+            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_supply_apy%%' "
+            f"AND COALESCE({prefix}quality_flags, '') NOT LIKE '%%anomalous_borrow_apy%%'))"
         )
 
     def save_lending_evaluation(self, snapshot, evaluation):
@@ -480,11 +480,20 @@ class Database:
         return {row["source"]: dict(row) for row in rows}
 
     def history(self, pool_address, hours, protocol="Raydium"):
-        return self.conn.execute("""
-            SELECT calculated_fee_apr AS apr FROM lp_snapshots
-            WHERE protocol = ? AND pool_address = ? AND snapshot_time >= datetime('now', ?)
-              AND calculated_fee_apr IS NOT NULL
-        """, (protocol, pool_address, f"-{hours} hours")).fetchall()
+        if self.backend == "postgresql":
+            query = """
+                SELECT calculated_fee_apr AS apr FROM lp_snapshots
+                WHERE protocol = ? AND pool_address = ?
+                  AND snapshot_time::timestamptz >= (CURRENT_TIMESTAMP + ?::interval)
+                  AND calculated_fee_apr IS NOT NULL
+            """
+        else:
+            query = """
+                SELECT calculated_fee_apr AS apr FROM lp_snapshots
+                WHERE protocol = ? AND pool_address = ? AND snapshot_time >= datetime('now', ?)
+                  AND calculated_fee_apr IS NOT NULL
+            """
+        return self.conn.execute(query, (protocol, pool_address, f"-{hours} hours")).fetchall()
 
     def history_count(self, pool_address, hours, protocol="Raydium"):
         return len(self.history(pool_address, hours, protocol))
